@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale-1.0">
     <title>Consulta y Registro de Asistentes</title>
     <!-- Tailwind CSS para un diseño moderno y responsivo -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -82,16 +82,14 @@
         <section id="new-record-form-section" class="form-section transition-all">
             <div class="bg-gray-50 p-6 rounded-lg border">
                 <h2 class="text-2xl font-bold text-center mb-4">Nuevo Registro</h2>
-                <form id="new-record-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input type="text" name="nit" placeholder="NIT DE LA EMPRESA *" required class="p-2 border rounded-md">
+                <!-- FORMULARIO MODIFICADO -->
+                <form id="new-record-form" class="grid grid-cols-1 gap-4">
                     <input type="text" name="companyName" placeholder="NOMBRE DE EMPRESA *" required class="p-2 border rounded-md">
-                    <input type="text" name="companyAddress" placeholder="DIRECCIÓN DE LA EMPRESA" class="p-2 border rounded-md md:col-span-2">
-                    <input type="text" name="attendeeId" placeholder="CÉDULA ASISTENTE *" required class="p-2 border rounded-md">
                     <input type="text" name="attendeeName" placeholder="NOMBRE Y APELLIDOS ASISTENTE *" required class="p-2 border rounded-md">
                     <input type="email" name="attendeeEmail" placeholder="CORREO ELECTRÓNICO *" required class="p-2 border rounded-md">
-                    <input type="tel" name="attendeePhone" placeholder="NÚMERO CELULAR" class="p-2 border rounded-md">
-                    <input type="text" name="attendeePosition" placeholder="CARGO ASISTENTE" class="p-2 border rounded-md md:col-span-2">
-                    <div class="md:col-span-2 flex justify-center gap-4 mt-4">
+                    <input type="tel" name="attendeePhone" placeholder="NÚMERO DE CELULAR" class="p-2 border rounded-md">
+                    <input type="text" name="attendeePosition" placeholder="CARGO ASISTENTE" class="p-2 border rounded-md">
+                    <div class="flex justify-center gap-4 mt-4">
                         <button type="submit" class="bg-blue-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-blue-700">Guardar Registro</button>
                         <button type="button" id="cancel-form-button" class="bg-gray-500 text-white font-semibold px-6 py-2 rounded-lg hover:bg-gray-600">Cancelar</button>
                     </div>
@@ -109,12 +107,216 @@
 
 <script>
     // --- CONFIGURACIÓN IMPORTANTE ---
-    // 1. CREA Y DESPLIEGA EL SCRIPT: Sigue las instrucciones del archivo README.md para crear un Google Apps Script.
-    // 2. PEGA LA URL AQUÍ: Una vez desplegado, pega aquí la URL de la aplicación web que generes.
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXLvRbFtmjaCb1O-H2uVP2PM40aMh4pik48C51pFiVSFmvPD_so5zeo3Zyzt9fICxk/exec'; // <-- ¡URL CORREGIDA!
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXLvRbFtmjaCb1O-H2uVP2PM40aMh4pik48C51pFiVSFmvPD_so5zeo3Zyzt9fICxk/exec';
     // --- FIN DE LA CONFIGURACIÓN ---
 
     // Referencias a elementos del DOM
     const searchInput = document.getElementById('search-input');
-// ... existing code ... -->
+    const searchButton = document.getElementById('search-button');
+    const resultsContainer = document.getElementById('results-container');
+    const loader = document.getElementById('loader');
+    const showFormButton = document.getElementById('show-form-button');
+    const newRecordFormSection = document.getElementById('new-record-form-section');
+    const newRecordForm = document.getElementById('new-record-form');
+    const cancelFormButton = document.getElementById('cancel-form-button');
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toast-message');
+
+    let sheetData = [];
+    let loadingState = 'idle';
+
+    // Función para mostrar notificaciones
+    function showToast(message, isError = false) {
+        toastMessage.textContent = message;
+        toast.className = `fixed bottom-5 right-5 text-white py-2 px-4 rounded-lg shadow-xl transition-transform duration-500 ${isError ? 'bg-red-500' : 'bg-green-500'}`;
+        toast.classList.remove('translate-x-[120%]');
+        setTimeout(() => {
+            toast.classList.add('translate-x-[120%]');
+        }, 3000);
+    }
+
+    // Función para cargar los datos desde Google Apps Script
+    async function loadSheetData() {
+        loader.style.display = 'flex';
+        loadingState = 'loading';
+        resultsContainer.innerHTML = ''; 
+        
+        try {
+            const response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                redirect: 'follow', // CORREGIDO: Maneja posibles redirecciones del script
+                body: JSON.stringify({ action: 'getData' }),
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                mode: 'cors'
+            });
+
+            if (!response.ok) {
+                 const errorText = await response.text();
+                 throw new Error(`Error HTTP: ${response.status} - ${errorText}`);
+            }
+            
+            const result = await response.json();
+
+            if (result.result === 'success') {
+                sheetData = result.data;
+                loadingState = 'success';
+                showToast('Conexión exitosa. Ya puedes buscar.');
+            } else {
+                throw new Error(result.message || 'Error desconocido del script.');
+            }
+        } catch (error) {
+            console.error('Error en loadSheetData:', error);
+            loadingState = 'error';
+            // CORREGIDO: Mensaje de error más específico para 'Failed to fetch'
+            resultsContainer.innerHTML = `<div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg" role="alert"><p class="font-bold">Error de Conexión: ${error.message}</p><p class="mt-2 text-sm"><b>Causa Común:</b> Este error suele ocurrir por restricciones de seguridad (CORS) del navegador al abrir este archivo localmente. Asegúrate de tener conexión a internet y de que la URL del script sea correcta y esté implementada.</p></div>`;
+            showToast('Fallo al cargar datos. Revisa la configuración.', true);
+        } finally {
+            loader.style.display = 'none';
+        }
+    }
+
+    // Función para mostrar los resultados de la búsqueda
+    function displayResults(results) {
+        resultsContainer.innerHTML = '';
+        if (results.length === 0) {
+            resultsContainer.innerHTML = `<p class="text-center text-gray-500">No se encontraron registros. Puedes crear uno nuevo.</p>`;
+            return;
+        }
+
+        results.forEach(row => {
+            const resultCard = document.createElement('div');
+            resultCard.className = 'bg-white border rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-shadow';
+            
+            const nombre = row['NOMBRE Y APELLIDOS  ASISTENTE'] || 'N/A';
+            const empresa = row['NOMBRE DE EMPRESA'] || 'N/A';
+            const cargo = row['CARGO ASISTENTE'] || 'N/A';
+            const cedula = row['CEDULA ASISTENTE'] || 'N/A';
+            const contactoStatus = row['Contacto'] === 'SI';
+            const isChecked = contactoStatus ? 'checked' : '';
+            
+            resultCard.innerHTML = `
+                <div class="flex-grow">
+                    <p class="font-bold text-lg text-blue-700">${nombre}</p>
+                    <p class="text-sm text-gray-600">${empresa} - <span class="font-medium">${cargo}</span></p>
+                    <p class="text-xs text-gray-400 mt-1">Cédula: ${cedula}</p>
+                </div>
+                <div class="flex items-center space-x-3 ml-4">
+                    <label for="check-${cedula}" class="text-sm font-medium text-gray-700">Contactado:</label>
+                    <input id="check-${cedula}" type="checkbox" data-cedula="${cedula}" class="confirm-checkbox h-6 w-6 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer" ${isChecked}>
+                </div>
+            `;
+            resultsContainer.appendChild(resultCard);
+        });
+    }
+
+    // Función para manejar la búsqueda
+    function handleSearch() {
+        const query = searchInput.value.trim().toLowerCase();
+        if (!query) {
+            showToast('Por favor, ingresa un término de búsqueda.', true);
+            return;
+        }
+
+        if (loadingState !== 'success') {
+            showToast('Los datos no están cargados.', true);
+            return;
+        }
+        
+        const results = sheetData.filter(row => {
+            const nit = (row['NIT DE LA EMPRESA'] || '').toString().toLowerCase();
+            const cedula = (row['CEDULA ASISTENTE'] || '').toString().toLowerCase();
+            return nit.includes(query) || cedula.includes(query);
+        });
+
+        displayResults(results);
+    }
+
+    // Función para actualizar el estado del contacto (checkbox)
+    async function handleStatusUpdate(cedula, isChecked) {
+        const status = isChecked ? 'SI' : '';
+        const data = { action: 'updateStatus', attendeeId: cedula, status: status };
+
+        try {
+            const response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                redirect: 'follow', // CORREGIDO: Maneja posibles redirecciones del script
+                body: JSON.stringify(data),
+                headers: { "Content-Type": "text/plain;charset=utf-8" }
+            });
+            const result = await response.json();
+
+            if (result.result === 'success') {
+                showToast('Estado de contacto actualizado.');
+                const recordInCache = sheetData.find(row => row['CEDULA ASISTENTE'].toString() === cedula.toString());
+                if (recordInCache) {
+                    recordInCache['Contacto'] = status;
+                }
+            } else {
+                throw new Error(result.message || 'Error al actualizar.');
+            }
+        } catch (error) {
+            console.error('Error al actualizar estado:', error);
+            showToast(`Error: ${error.message}`, true);
+            const checkbox = document.querySelector(`input[data-cedula="${cedula}"]`);
+            if (checkbox) checkbox.checked = !isChecked; // Revertir el check si hay error
+        }
+    }
+    
+    // Función para manejar el envío del nuevo registro
+    async function handleNewRegistration(event) {
+        event.preventDefault();
+        loader.style.display = 'flex';
+        const formData = new FormData(newRecordForm);
+        const data = Object.fromEntries(formData.entries());
+        data.action = 'addRecord';
+
+        try {
+            const response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                redirect: 'follow', // CORREGIDO: Maneja posibles redirecciones del script
+                body: JSON.stringify(data),
+                headers: { "Content-Type": "text/plain;charset=utf-8" }
+            });
+
+            const result = await response.json();
+            if (result.result === 'success') {
+                showToast('¡Asistente registrado con éxito!');
+                newRecordForm.reset();
+                newRecordFormSection.classList.remove('open');
+                await loadSheetData();
+            } else {
+                throw new Error(result.message || 'Error desconocido al guardar.');
+            }
+        } catch (error) {
+            console.error('Error al registrar:', error);
+            showToast(`Error al guardar: ${error.message}`, true);
+        } finally {
+            loader.style.display = 'none';
+        }
+    }
+
+    // Event Listeners
+    searchButton.addEventListener('click', handleSearch);
+    searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearch();
+    });
+    
+    showFormButton.addEventListener('click', () => newRecordFormSection.classList.add('open'));
+    cancelFormButton.addEventListener('click', () => newRecordFormSection.classList.remove('open'));
+    newRecordForm.addEventListener('submit', handleNewRegistration);
+
+    // Event listener para los checkboxes usando delegación
+    resultsContainer.addEventListener('change', (e) => {
+        if (e.target.classList.contains('confirm-checkbox')) {
+            const cedula = e.target.dataset.cedula;
+            const isChecked = e.target.checked;
+            handleStatusUpdate(cedula, isChecked);
+        }
+    });
+
+    window.addEventListener('load', loadSheetData);
+
+</script>
+</body>
+</html>
 
